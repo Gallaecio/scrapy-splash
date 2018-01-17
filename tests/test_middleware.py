@@ -32,8 +32,8 @@ def _get_crawler(settings_dict):
     return crawler
 
 
-def _get_mw():
-    crawler = _get_crawler({})
+def _get_mw(settings_dict=None):
+    crawler = _get_crawler(settings_dict or {})
     return SplashMiddleware.from_crawler(crawler)
 
 
@@ -740,7 +740,7 @@ def test_slot_policy_per_domain():
 
 def test_slot_policy_scrapy_default():
     mw = _get_mw()
-    req = scrapy.Request("http://example.com", meta = {'splash': {
+    req = scrapy.Request("http://example.com", meta={'splash': {
         'slot_policy': scrapy_splash.SlotPolicy.SCRAPY_DEFAULT
     }})
     req = mw.process_request(req, None)
@@ -749,7 +749,7 @@ def test_slot_policy_scrapy_default():
 
 def test_adjust_timeout():
     mw = _get_mw()
-    req1 = scrapy.Request("http://example.com", meta = {
+    req1 = scrapy.Request("http://example.com", meta={
         'splash': {'args': {'timeout': 60, 'html': 1}},
 
         # download_timeout is always present,
@@ -759,9 +759,32 @@ def test_adjust_timeout():
     req1 = mw.process_request(req1, None)
     assert req1.meta['download_timeout'] > 60
 
-    req2 = scrapy.Request("http://example.com", meta = {
+    req2 = scrapy.Request("http://example.com", meta={
         'splash': {'args': {'html': 1}},
         'download_timeout': 30,
     })
     req2 = mw.process_request(req2, None)
     assert req2.meta['download_timeout'] == 30
+
+
+def test_auth():
+    def assert_auth_header(user, pwd, header):
+        mw = _get_mw({'SPLASH_USER': user, 'SPLASH_PASS': pwd})
+        req = mw.process_request(SplashRequest("http://example.com"), None)
+        assert 'Authorization' in req.headers
+        assert req.headers['Authorization'] == header
+
+    def assert_no_auth_header(user, pwd):
+        if user is not None or pwd is not None:
+            mw = _get_mw({'SPLASH_USER': user, 'SPLASH_PASS': pwd})
+        else:
+            mw = _get_mw()
+        req = mw.process_request(SplashRequest("http://example.com"), None)
+        assert 'Authorization' not in req.headers
+
+    assert_auth_header('root', '', b'Basic cm9vdDo=')
+    assert_auth_header('root', 'pwd', b'Basic cm9vdDpwd2Q=')
+    assert_auth_header('', 'pwd', b'Basic OnB3ZA==')
+
+    assert_no_auth_header('', '')
+    assert_no_auth_header(None, None)

@@ -10,6 +10,7 @@ from collections import defaultdict
 from six.moves.urllib.parse import urljoin
 from six.moves.http_cookiejar import CookieJar
 
+from w3lib.http import basic_auth_header
 import scrapy
 from scrapy.exceptions import NotConfigured
 from scrapy.http.headers import Headers
@@ -222,24 +223,29 @@ class SplashMiddleware(object):
     retry_498_priority_adjust = +50
     remote_keys_key = '_splash_remote_keys'
 
-    def __init__(self, crawler, splash_base_url, slot_policy, log_400):
+    def __init__(self, crawler, splash_base_url, slot_policy, log_400, auth):
         self.crawler = crawler
         self.splash_base_url = splash_base_url
         self.slot_policy = slot_policy
         self.log_400 = log_400
         self.crawler.signals.connect(self.spider_opened, signals.spider_opened)
+        self.auth = auth
 
     @classmethod
     def from_crawler(cls, crawler):
-        splash_base_url = crawler.settings.get('SPLASH_URL',
-                                               cls.default_splash_url)
-        log_400 = crawler.settings.getbool('SPLASH_LOG_400', True)
-        slot_policy = crawler.settings.get('SPLASH_SLOT_POLICY',
-                                           cls.default_policy)
+        s = crawler.settings
+        splash_base_url = s.get('SPLASH_URL', cls.default_splash_url)
+        log_400 = s.getbool('SPLASH_LOG_400', True)
+        slot_policy = s.get('SPLASH_SLOT_POLICY', cls.default_policy)
         if slot_policy not in SlotPolicy._known:
             raise NotConfigured("Incorrect slot policy: %r" % slot_policy)
 
-        return cls(crawler, splash_base_url, slot_policy, log_400)
+        splash_user = s.get('SPLASH_USER', '')
+        splash_pass = s.get('SPLASH_PASS', '')
+        auth = None
+        if splash_user or splash_pass:
+            auth = basic_auth_header(splash_user, splash_pass)
+        return cls(crawler, splash_base_url, slot_policy, log_400, auth)
 
     def spider_opened(self, spider):
         if not hasattr(spider, 'state'):
@@ -353,6 +359,8 @@ class SplashMiddleware(object):
         splash_url = urljoin(splash_base_url, endpoint)
 
         headers = Headers({'Content-Type': 'application/json'})
+        if self.auth is not None:
+            headers['Authorization'] = self.auth
         headers.update(splash_options.get('splash_headers', {}))
         new_request = request.replace(
             url=splash_url,
