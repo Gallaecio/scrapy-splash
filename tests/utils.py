@@ -16,21 +16,6 @@ requires_splash = pytest.mark.skipif(
 )
 
 
-class HtmlResource(Resource):
-    isLeaf = True
-    content_type = 'text/html'
-    html = ''
-    extra_headers = {}
-    status_code = 200
-
-    def render_GET(self, request):
-        request.setHeader(b'content-type', to_bytes(self.content_type))
-        for name, value in self.extra_headers.items():
-            request.setHeader(to_bytes(name), to_bytes(value))
-        request.setResponseCode(self.status_code)
-        return to_bytes(self.html)
-
-
 @inlineCallbacks
 def crawl_items(spider_cls, resource_cls, settings, spider_kwargs=None):
     """ Use spider_cls to crawl resource_cls. URL of the resource is passed

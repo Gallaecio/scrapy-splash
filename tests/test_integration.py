@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import scrapy
 from pytest_twisted import inlineCallbacks
-from twisted.web.resource import Resource
 from w3lib.url import canonicalize_url
 
 from scrapy_splash import SplashRequest
-from .utils import crawl_items, requires_splash, HtmlResource
+from .utils import crawl_items, requires_splash
+from .resources import HelloWorld, Http400Resource, ManyCookies
 
 DEFAULT_SCRIPT = """
 function main(splash)
@@ -32,31 +32,6 @@ function main(splash)
   }
 end
 """
-
-
-class HelloWorld(HtmlResource):
-    html = """
-    <html><body><script>document.write('hello world!');</script></body></html>
-    """
-    extra_headers = {'X-MyHeader': 'my value', 'Set-Cookie': 'sessionid=ABCD'}
-
-
-class Http400Resource(HtmlResource):
-    status_code = 400
-    html = "Website returns HTTP 400 error"
-
-
-
-class ManyCookies(Resource, object):
-    class SetMyCookie(HtmlResource):
-        html = "hello!"
-        extra_headers = {'Set-Cookie': 'login=1'}
-
-    def __init__(self):
-        super(ManyCookies, self).__init__()
-        self.putChild(b'', HelloWorld())
-        self.putChild(b'login', self.SetMyCookie())
-
 
 
 class ResponseSpider(scrapy.Spider):
