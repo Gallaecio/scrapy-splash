@@ -11,6 +11,7 @@ from .resources import (
     Http400Resource,
     ManyCookies,
     HelloWorldProtected,
+    HelloWorldDisallowAuth,
 )
 
 
@@ -445,3 +446,21 @@ def test_protected_splash_httpauth_middleware(settings_auth):
     assert 'hello' not in response.body_as_unicode()
     assert response.status == 401
     assert response.splash_response_status == 200
+
+    # headers shouldn't be sent to robots.txt file
+    items, url, crawler = yield crawl_items(ScrapyAuthSpider,
+                                            HelloWorldDisallowAuth,
+                                            settings_auth)
+    response = assert_single_response(items)
+    assert 'hello' in response.body_as_unicode()
+    assert response.status == 200
+    assert response.splash_response_status == 200
+
+    # httpauth shouldn't be disabled for non-Splash requests
+    items, url, crawler = yield crawl_items(NonSplashSpider,
+                                            HelloWorldProtected,
+                                            settings_auth)
+    response = assert_single_response(items)
+    assert 'hello' in response.body_as_unicode()
+    assert response.status == 200
+    assert not hasattr(response, 'splash_response_status')

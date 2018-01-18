@@ -42,6 +42,7 @@ class SplashRequest(scrapy.Request):
 
         meta = meta or {}
         splash_meta = meta.setdefault('splash', {})
+        splash_meta['SplashRequest'] = True
         splash_meta.setdefault('endpoint', endpoint)
         splash_meta.setdefault('slot_policy', slot_policy)
         if splash_url is not None:
@@ -71,6 +72,12 @@ class SplashRequest(scrapy.Request):
         # This is not strictly required, but it strengthens Splash
         # requests against AjaxCrawlMiddleware
         meta['ajax_crawlable'] = True
+
+        # Security fix: disable robots.txt handling to prevent leaks of
+        # credentials when using  HttpAuthMiddleware.
+        splash_meta.setdefault('_dont_obey_robotstxt',
+                               meta.get('dont_obey_robotstxt', None))
+        meta['dont_obey_robotstxt'] = True
 
         super(SplashRequest, self).__init__(url, callback, method, meta=meta,
                                             **kwargs)

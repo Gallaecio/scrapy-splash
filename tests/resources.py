@@ -33,6 +33,25 @@ class HelloWorld(HtmlResource):
     extra_headers = {'X-MyHeader': 'my value', 'Set-Cookie': 'sessionid=ABCD'}
 
 
+class HelloWorldDisallowAuth(HelloWorld):
+    """ Disallow itself via robots.txt if a request to robots.txt
+    contains basic auth header. """
+    isLeaf = False
+
+    def getChild(self, name, request):
+        if name == b"robots.txt":
+            return self.RobotsTxt()
+        return self
+
+    class RobotsTxt(Resource):
+        isLeaf = True
+        def render_GET(self, request):
+            if request.requestHeaders.hasHeader('Authorization'):
+                return b'User-Agent: *\nDisallow: /\n'
+            request.setResponseCode(404)
+            return b''
+
+
 class Http400Resource(HtmlResource):
     status_code = 400
     html = "Website returns HTTP 400 error"

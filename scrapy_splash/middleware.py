@@ -10,6 +10,7 @@ from collections import defaultdict
 from six.moves.urllib.parse import urljoin
 from six.moves.http_cookiejar import CookieJar
 
+from twisted.internet import reactor
 from w3lib.http import basic_auth_header
 import scrapy
 from scrapy.exceptions import NotConfigured, IgnoreRequest
@@ -324,6 +325,35 @@ class SplashMiddleware(object):
             args.setdefault('http_method', request.method)
             # XXX: non-UTF8 request bodies are not supported now
             args.setdefault('body', request.body.decode('utf8'))
+
+        if _http_auth_enabled(spider):
+            logger.error("ATTENTION: POSSIBLE SECURITY ISSUE. \n"
+                         "Please use either SPLASH_USER / SPLASH_PASS "
+                         "settings or `splash_headers` argument "
+                         "for Splash authentication. Using "
+                         "HttpAuthMiddleware (i.e. `http_user` and "
+                         "`http_pass` spider attributes) is insecure "
+                         "because it is possible to accidentally "
+                         "leak Splash credentials to a remote website. "
+                         "Please update your code ASAP.")
+            self.crawler.stats.inc_value("splash/insecure")
+            if 'SplashRequest' not in splash_options:
+                # Only SplashRequest has protection against robots.txt
+                # credentials leak; raw request.meta['splash'] requests don't.
+                logger.error("ATTENTION: SECURITY ISSUE. The spider is "
+                             "leaking Splash credentials to remote websites "
+                             "via robots.txt requests. Spider is stopped. "
+                             "Use SPLASH_USER / SPLASH_PASS settings "
+                             "instead of http_user / http_pass spider "
+                             "attributes.")
+                reactor.stop()
+
+        else:
+            # no leak detected; bring back robots.txt handling
+            if splash_options.get('_dont_obey_robotstxt', None) is not None:
+                request.meta['dont_obey_robotstxt'] = splash_options[
+                    '_dont_obey_robotstxt']
+                del splash_options['_dont_obey_robotstxt']
 
         if not splash_options.get('dont_send_headers'):
             headers = scrapy_headers_to_unicode_dict(request.headers)

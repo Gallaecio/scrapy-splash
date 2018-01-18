@@ -602,6 +602,12 @@ to ``splash_headers`` if you want to change credentials per-request::
             yield SplashRequest(url, self.parse,
                                 splash_headers={'Authorization': auth})
 
+**WARNING:** Don't use :ref:`HttpAuthMiddleware`
+(i.e. ``http_user`` / ``http_pass`` spider attributes) for Splash
+authentication: if you occasionally send a non-Splash request from your spider
+(including a request to robots.txt which is sent automaticaly), you may expose
+Splash credentials to a remote website.
+
 
 .. _HttpAuthMiddleware: http://doc.scrapy.org/en/latest/topics/downloader-middleware.html#module-scrapy.downloadermiddlewares.httpauth
 

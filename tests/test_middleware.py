@@ -140,7 +140,11 @@ def test_splash_request_parameters():
     )
     req2 = cookie_mw.process_request(req, None) or req
     req2 = mw.process_request(req2, None)
+    assert req2.meta['dont_obey_robotstxt'] is True
+    assert req2.meta['ajax_crawlable'] is True
     assert req2.meta['splash'] == {
+        'SplashRequest': True,
+        '_dont_obey_robotstxt': None,
         'endpoint': 'execute',
         'splash_url': "http://mysplash.example.com",
         'slot_policy': SlotPolicy.SINGLE_SLOT,
