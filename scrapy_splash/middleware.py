@@ -12,7 +12,7 @@ from six.moves.http_cookiejar import CookieJar
 
 from w3lib.http import basic_auth_header
 import scrapy
-from scrapy.exceptions import NotConfigured
+from scrapy.exceptions import NotConfigured, IgnoreRequest
 from scrapy.http.headers import Headers
 from scrapy.http.response.text import TextResponse
 from scrapy import signals
@@ -268,13 +268,16 @@ class SplashMiddleware(object):
             return
 
         if request.method not in {'GET', 'POST'}:
-            logger.warning(
+            logger.error(
                 "Currently only GET and POST requests are supported by "
-                "SplashMiddleware; %(request)s will be handled without Splash",
+                "SplashMiddleware; %(request)s is dropped",
                 {'request': request},
                 extra={'spider': spider}
             )
-            return request
+            self.crawler.stats.inc_value('splash/dropped/method/{}'.format(
+                request.method))
+            raise IgnoreRequest("SplashRequest doesn't support "
+                                "HTTP {} method".format(request.method))
 
         if request.meta.get("_splash_processed"):
             # don't process the same request more than once
