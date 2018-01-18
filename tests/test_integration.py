@@ -16,7 +16,10 @@ function main(splash)
     http_method=splash.args.http_method,
     body=splash.args.body,
   }
-  local wait = tonumber(splash.args.wait or 0.5)  
+  local wait = 0.01
+  if splash.args.wait ~= nil then
+    wait = splash.args.wait
+  end
   assert(splash:wait(wait))
 
   local entries = splash:history()
@@ -36,6 +39,10 @@ end
 
 class ResponseSpider(scrapy.Spider):
     """ Make a request to URL, return Scrapy response """
+    custom_settings = {
+        'HTTPERROR_ALLOW_ALL': True,
+        'ROBOTSTXT_OBEY': True,
+    }
     url = None
 
     def start_requests(self):
@@ -45,13 +52,17 @@ class ResponseSpider(scrapy.Spider):
         yield {'response': response}
 
 
+def assert_single_response(items):
+    assert len(items) == 1
+    return items[0]['response']
+
+
 @requires_splash
 @inlineCallbacks
 def test_basic(settings):
     items, url, crawler = yield crawl_items(ResponseSpider, HelloWorld,
                                             settings)
-    assert len(items) == 1
-    resp = items[0]['response']
+    resp = assert_single_response(items)
     assert resp.url == url
     assert resp.css('body::text').extract_first().strip() == "hello world!"
 
@@ -99,8 +110,7 @@ def test_basic_lua(settings):
 
     items, url, crawler = yield crawl_items(LuaScriptSpider, HelloWorld,
                                             settings)
-    assert len(items) == 1
-    resp = items[0]['response']
+    resp = assert_single_response(items)
     assert resp.url == url + "/#foo"
     assert resp.status == resp.splash_response_status == 200
     assert resp.css('body::text').extract_first().strip() == "hello world!"
@@ -115,8 +125,6 @@ def test_basic_lua(settings):
 @inlineCallbacks
 def test_bad_request(settings):
     class BadRequestSpider(ResponseSpider):
-        custom_settings = {'HTTPERROR_ALLOW_ALL': True}
-
         def start_requests(self):
             yield SplashRequest(self.url, endpoint='execute',
                                 args={'lua_source': DEFAULT_SCRIPT, 'wait': 'bar'})
@@ -131,13 +139,13 @@ def test_bad_request(settings):
 
     items, url, crawler = yield crawl_items(BadRequestSpider, HelloWorld,
                                             settings)
-    resp = items[0]['response']
+    resp = assert_single_response(items)
     assert resp.status == 400
     assert resp.splash_response_status == 400
 
     items, url, crawler = yield crawl_items(GoodRequestSpider, Http400Resource,
                                             settings)
-    resp = items[0]['response']
+    resp = assert_single_response(items)
     assert resp.status == 400
     assert resp.splash_response_status == 200
 

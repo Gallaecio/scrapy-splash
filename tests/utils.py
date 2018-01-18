@@ -3,11 +3,9 @@ import os
 import pytest
 from pytest_twisted import inlineCallbacks
 from twisted.internet.defer import returnValue
-from twisted.web.resource import Resource
 from scrapy.crawler import Crawler
 
-from scrapy_splash.utils import to_bytes
-from tests.mockserver import MockServer
+from .mockserver import MockServer
 
 
 requires_splash = pytest.mark.skipif(
@@ -25,9 +23,11 @@ def crawl_items(spider_cls, resource_cls, settings, spider_kwargs=None):
     spider_kwargs = {} if spider_kwargs is None else spider_kwargs
     crawler = make_crawler(spider_cls, settings)
     with MockServer(resource_cls) as s:
+        print("mock server", s.root_url)
         root_url = s.root_url
         yield crawler.crawl(url=root_url, **spider_kwargs)
-    result = crawler.spider.collected_items, s.root_url, crawler
+    items = getattr(crawler.spider, 'collected_items', [])
+    result = items, s.root_url, crawler
     returnValue(result)
 
 

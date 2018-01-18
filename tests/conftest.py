@@ -1,11 +1,10 @@
 import os
 
 import pytest
-from scrapy.settings import Settings
 
 
 @pytest.fixture()
-def settings(request):
+def settings():
     """ Default scrapy-splash settings """
     s = dict(
         # collect scraped items to .collected_items attribute
@@ -28,6 +27,6 @@ def settings(request):
         DUPEFILTER_CLASS='scrapy_splash.SplashAwareDupeFilter',
         HTTPCACHE_STORAGE='scrapy_splash.SplashAwareFSCacheStorage',
     )
-    return Settings(s)
+    return s
 
 

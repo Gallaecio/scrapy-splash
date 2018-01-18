@@ -19,7 +19,6 @@ class HtmlResource(Resource):
         return to_bytes(self.html)
 
 
-
 class HelloWorld(HtmlResource):
     html = """
     <html><body><script>document.write('hello world!');</script></body></html>
@@ -30,7 +29,6 @@ class HelloWorld(HtmlResource):
 class Http400Resource(HtmlResource):
     status_code = 400
     html = "Website returns HTTP 400 error"
-
 
 
 class ManyCookies(Resource, object):
