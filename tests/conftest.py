@@ -1,6 +1,8 @@
 import os
 
 import pytest
+from .mockserver import MockServer
+from .resources import SplashProtected
 
 
 @pytest.fixture()
@@ -30,3 +32,9 @@ def settings():
     return s
 
 
+@pytest.fixture()
+def settings_auth(settings):
+    with MockServer(SplashProtected) as s:
+        print("splash url:", s.root_url)
+        settings['SPLASH_URL'] = s.root_url
+        yield settings

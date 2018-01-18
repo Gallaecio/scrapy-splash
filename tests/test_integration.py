@@ -2,10 +2,17 @@
 import scrapy
 from pytest_twisted import inlineCallbacks
 from w3lib.url import canonicalize_url
+from w3lib.http import basic_auth_header
 
 from scrapy_splash import SplashRequest
 from .utils import crawl_items, requires_splash
-from .resources import HelloWorld, Http400Resource, ManyCookies
+from .resources import (
+    HelloWorld,
+    Http400Resource,
+    ManyCookies,
+    HelloWorldProtected,
+)
+
 
 DEFAULT_SCRIPT = """
 function main(splash)
@@ -50,6 +57,19 @@ class ResponseSpider(scrapy.Spider):
 
     def parse(self, response):
         yield {'response': response}
+
+
+class LuaSpider(ResponseSpider):
+    """ Make a request to URL using default Lua script """
+    headers = None
+    splash_headers = None
+
+    def start_requests(self):
+        yield SplashRequest(self.url,
+                            endpoint='execute',
+                            args={'lua_source': DEFAULT_SCRIPT},
+                            headers=self.headers,
+                            splash_headers=self.splash_headers)
 
 
 def assert_single_response(items):
@@ -129,21 +149,13 @@ def test_bad_request(settings):
             yield SplashRequest(self.url, endpoint='execute',
                                 args={'lua_source': DEFAULT_SCRIPT, 'wait': 'bar'})
 
-    class GoodRequestSpider(ResponseSpider):
-        custom_settings = {'HTTPERROR_ALLOW_ALL': True}
-
-        def start_requests(self):
-            yield SplashRequest(self.url, endpoint='execute',
-                                args={'lua_source': DEFAULT_SCRIPT})
-
-
     items, url, crawler = yield crawl_items(BadRequestSpider, HelloWorld,
                                             settings)
     resp = assert_single_response(items)
     assert resp.status == 400
     assert resp.splash_response_status == 400
 
-    items, url, crawler = yield crawl_items(GoodRequestSpider, Http400Resource,
+    items, url, crawler = yield crawl_items(LuaSpider, Http400Resource,
                                             settings)
     resp = assert_single_response(items)
     assert resp.status == 400
@@ -289,3 +301,147 @@ def test_cookies(settings):
         'bomb': BOMB,
     }
     assert splash_request_headers.get(b'Cookie') is None
+
+
+@requires_splash
+@inlineCallbacks
+def test_access_http_auth(settings):
+    # website is protected
+    items, url, crawler = yield crawl_items(LuaSpider, HelloWorldProtected,
+                                            settings)
+    response = assert_single_response(items)
+    assert response.status == 401
+    assert response.splash_response_status == 200
+
+    # header can be used to access it
+    AUTH_HEADERS = {'Authorization': basic_auth_header('user', 'userpass')}
+    kwargs = {'headers': AUTH_HEADERS}
+    items, url, crawler = yield crawl_items(LuaSpider, HelloWorldProtected,
+                                            settings, kwargs)
+    response = assert_single_response(items)
+    assert 'hello' in response.body_as_unicode()
+    assert response.status == 200
+    assert response.splash_response_status == 200
+
+
+@requires_splash
+@inlineCallbacks
+def test_protected_splash_no_auth(settings_auth):
+    items, url, crawler = yield crawl_items(LuaSpider, HelloWorld,
+                                            settings_auth)
+    response = assert_single_response(items)
+    assert 'Unauthorized' in response.body_as_unicode()
+    assert 'hello' not in response.body_as_unicode()
+    assert response.status == 401
+    assert response.splash_response_status == 401
+
+
+@requires_splash
+@inlineCallbacks
+def test_protected_splash_manual_headers_auth(settings_auth):
+    AUTH_HEADERS = {'Authorization': basic_auth_header('user', 'userpass')}
+    kwargs = {'splash_headers': AUTH_HEADERS}
+
+    # auth via splash_headers should work
+    items, url, crawler = yield crawl_items(LuaSpider, HelloWorld,
+                                            settings_auth, kwargs)
+    response = assert_single_response(items)
+    assert 'hello' in response.body_as_unicode()
+    assert response.status == 200
+    assert response.splash_response_status == 200
+
+    # but only for Splash, not for a remote website
+    items, url, crawler = yield crawl_items(LuaSpider, HelloWorldProtected,
+                                            settings_auth, kwargs)
+    response = assert_single_response(items)
+    assert 'hello' not in response.body_as_unicode()
+    assert response.status == 401
+    assert response.splash_response_status == 200
+
+
+@requires_splash
+@inlineCallbacks
+def test_protected_splash_settings_auth(settings_auth):
+    settings_auth['SPLASH_USER'] = 'user'
+    settings_auth['SPLASH_PASS'] = 'userpass'
+
+    # settings works
+    items, url, crawler = yield crawl_items(LuaSpider, HelloWorld,
+                                            settings_auth)
+    response = assert_single_response(items)
+    assert 'Unauthorized' not in response.body_as_unicode()
+    assert 'hello' in response.body_as_unicode()
+    assert response.status == 200
+    assert response.splash_response_status == 200
+
+    # they can be overridden via splash_headers
+    bad_auth = {'splash_headers': {'Authorization': 'foo'}}
+    items, url, crawler = yield crawl_items(LuaSpider, HelloWorld,
+                                            settings_auth, bad_auth)
+    response = assert_single_response(items)
+    assert response.status == 401
+    assert response.splash_response_status == 401
+
+    # auth error on remote website
+    items, url, crawler = yield crawl_items(LuaSpider, HelloWorldProtected,
+                                            settings_auth)
+    response = assert_single_response(items)
+    assert response.status == 401
+    assert response.splash_response_status == 200
+
+    # auth both for Splash and for the remote website
+    REMOTE_AUTH = {'Authorization': basic_auth_header('user', 'userpass')}
+    remote_auth_kwargs = {'headers': REMOTE_AUTH}
+    items, url, crawler = yield crawl_items(LuaSpider, HelloWorldProtected,
+                                            settings_auth, remote_auth_kwargs)
+    response = assert_single_response(items)
+    assert response.status == 200
+    assert response.splash_response_status == 200
+    assert 'hello' in response.body_as_unicode()
+
+    # enable remote auth, but not splash auth - request should fail
+    del settings_auth['SPLASH_USER']
+    del settings_auth['SPLASH_PASS']
+    items, url, crawler = yield crawl_items(LuaSpider,
+                                            HelloWorldProtected,
+                                            settings_auth, remote_auth_kwargs)
+    response = assert_single_response(items)
+    assert response.status == 401
+    assert response.splash_response_status == 401
+
+
+@requires_splash
+@inlineCallbacks
+def test_protected_splash_httpauth_middleware(settings_auth):
+
+    class ScrapyAuthSpider(LuaSpider):
+        http_user = 'user'
+        http_pass = 'userpass'
+
+
+    class NonSplashSpider(ResponseSpider):
+        http_user = 'user'
+        http_pass = 'userpass'
+
+        def start_requests(self):
+            yield scrapy.Request(self.url)
+
+
+    # httpauth middleware should enable auth for Splash, for backwards
+    # compatibility reasons
+    items, url, crawler = yield crawl_items(ScrapyAuthSpider, HelloWorld,
+                                            settings_auth)
+    response = assert_single_response(items)
+    assert 'Unauthorized' not in response.body_as_unicode()
+    assert 'hello' in response.body_as_unicode()
+    assert response.status == 200
+    assert response.splash_response_status == 200
+
+    # but not for a remote website
+    items, url, crawler = yield crawl_items(ScrapyAuthSpider,
+                                            HelloWorldProtected,
+                                            settings_auth)
+    response = assert_single_response(items)
+    assert 'hello' not in response.body_as_unicode()
+    assert response.status == 401
+    assert response.splash_response_status == 200

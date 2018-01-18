@@ -328,6 +328,10 @@ class SplashMiddleware(object):
         if not splash_options.get('dont_send_headers'):
             headers = scrapy_headers_to_unicode_dict(request.headers)
             if headers:
+                # Headers set by HttpAuthMiddleware should be used for Splash,
+                # not for the remote website (backwards compatibility).
+                if _http_auth_enabled(spider):
+                    headers.pop('Authorization', None)
                 args.setdefault('headers', headers)
 
         body = json.dumps(args, ensure_ascii=False, sort_keys=True, indent=4)
@@ -489,3 +493,9 @@ class SplashMiddleware(object):
         return self.crawler.engine.downloader._get_slot_key(
             request_or_response, None
         )
+
+
+def _http_auth_enabled(spider):
+    # FIXME: this function should always return False if HttpAuthMiddleware is
+    # not in a middleware list.
+    return getattr(spider, 'http_user', '') or getattr(spider, 'http_user', '')

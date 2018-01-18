@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
+import os
+from six.moves.urllib.parse import urlparse
+
 from twisted.web.resource import Resource
+from zope.interface import implementer
+from twisted.web import resource, guard, proxy
+from twisted.cred.portal import IRealm, Portal
+from twisted.cred.checkers import InMemoryUsernamePasswordDatabaseDontUse
 
 from scrapy_splash.utils import to_bytes
 
@@ -42,4 +49,34 @@ class ManyCookies(Resource, object):
         self.putChild(b'login', self.SetMyCookie())
 
 
+def splash_proxy():
+    splash_url = os.environ.get('SPLASH_URL')
+    p = urlparse(splash_url)
+    return lambda: proxy.ReverseProxyResource(p.hostname, int(p.port), b'')
 
+
+def password_protected(resource_cls, username, password):
+    # Sorry, but this is nuts. A zillion of classes, arbitrary
+    # unicode / bytes requirements at random places. Is there a simpler
+    # way to get HTTP Basic Auth working in Twisted?
+    @implementer(IRealm)
+    class SimpleRealm(object):
+        def requestAvatar(self, avatarId, mind, *interfaces):
+            if resource.IResource in interfaces:
+                return resource.IResource, resource_cls(), lambda: None
+            raise NotImplementedError()
+
+    creds = {username: password}
+    checkers = [InMemoryUsernamePasswordDatabaseDontUse(**creds)]
+    return lambda: guard.HTTPAuthSessionWrapper(
+        Portal(SimpleRealm(), checkers),
+        [guard.BasicCredentialFactory(b'example.com')])
+
+
+HelloWorldProtected = password_protected(HelloWorld, 'user', b'userpass')
+HelloWorldProtected.__name__ = 'HelloWorldProtected'
+HelloWorldProtected.__module__ = __name__
+
+SplashProtected = password_protected(splash_proxy(), 'user', b'userpass')
+SplashProtected.__name__ = 'SplashProtected'
+SplashProtected.__module__ = __name__
