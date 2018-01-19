@@ -528,4 +528,4 @@ class SplashMiddleware(object):
 def _http_auth_enabled(spider):
     # FIXME: this function should always return False if HttpAuthMiddleware is
     # not in a middleware list.
-    return getattr(spider, 'http_user', '') or getattr(spider, 'http_user', '')
+    return getattr(spider, 'http_user', '') or getattr(spider, 'http_pass', '')
