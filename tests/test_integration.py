@@ -11,6 +11,7 @@ from .resources import (
     Http400Resource,
     ManyCookies,
     HelloWorldProtected,
+    HelloWorldDisallowByRobots,
     HelloWorldDisallowAuth,
 )
 
@@ -71,6 +72,12 @@ class LuaSpider(ResponseSpider):
                             args={'lua_source': DEFAULT_SCRIPT},
                             headers=self.headers,
                             splash_headers=self.splash_headers)
+
+
+class ScrapyAuthSpider(LuaSpider):
+    """ Spider with incorrect (old, insecure) auth method """
+    http_user = 'user'
+    http_pass = 'userpass'
 
 
 def assert_single_response(items):
@@ -415,18 +422,12 @@ def test_protected_splash_settings_auth(settings_auth):
 @inlineCallbacks
 def test_protected_splash_httpauth_middleware(settings_auth):
 
-    class ScrapyAuthSpider(LuaSpider):
-        http_user = 'user'
-        http_pass = 'userpass'
-
-
     class NonSplashSpider(ResponseSpider):
         http_user = 'user'
         http_pass = 'userpass'
 
         def start_requests(self):
             yield scrapy.Request(self.url)
-
 
     # httpauth middleware should enable auth for Splash, for backwards
     # compatibility reasons
@@ -464,3 +465,55 @@ def test_protected_splash_httpauth_middleware(settings_auth):
     assert 'hello' in response.body_as_unicode()
     assert response.status == 200
     assert not hasattr(response, 'splash_response_status')
+
+
+@requires_splash
+@inlineCallbacks
+def test_robotstxt_can_work(settings_auth):
+
+    def assert_robots_disabled(items):
+        response = assert_single_response(items)
+        assert response.status == response.splash_response_status == 200
+        assert b'hello' in response.body
+
+    def assert_robots_enabled(items, crawler):
+        assert len(items) == 0
+        assert crawler.stats.get_value('downloader/exception_type_count/scrapy.exceptions.IgnoreRequest') == 1
+
+    # when old auth method is used, robots.txt should be disabled
+    items, url, crawler = yield crawl_items(ScrapyAuthSpider,
+                                            HelloWorldDisallowByRobots,
+                                            settings_auth)
+    assert_robots_disabled(items)
+
+    # robots.txt should work when a proper auth method is used
+    settings_auth['SPLASH_USER'] = 'user'
+    settings_auth['SPLASH_PASS'] = 'userpass'
+    items, url, crawler = yield crawl_items(LuaSpider,
+                                            HelloWorldDisallowByRobots,
+                                            settings_auth)
+    assert_robots_enabled(items, crawler)
+
+    # disable robotstxt middleware - robots middleware shouldn't work
+    class DontObeyRobotsSpider(LuaSpider):
+        custom_settings = {
+            'HTTPERROR_ALLOW_ALL': True,
+            'ROBOTSTXT_OBEY': False,
+        }
+    items, url, crawler = yield crawl_items(DontObeyRobotsSpider,
+                                            HelloWorldDisallowByRobots,
+                                            settings_auth)
+    assert_robots_disabled(items)
+
+    # disable robotstxt middleware via request meta
+    class MetaDontObeyRobotsSpider(ResponseSpider):
+        def start_requests(self):
+            yield SplashRequest(self.url,
+                                endpoint='execute',
+                                meta={'dont_obey_robotstxt': True},
+                                args={'lua_source': DEFAULT_SCRIPT})
+
+    items, url, crawler = yield crawl_items(MetaDontObeyRobotsSpider,
+                                            HelloWorldDisallowByRobots,
+                                            settings_auth)
+    assert_robots_disabled(items)

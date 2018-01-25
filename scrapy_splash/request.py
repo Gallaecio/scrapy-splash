@@ -74,10 +74,11 @@ class SplashRequest(scrapy.Request):
         meta['ajax_crawlable'] = True
 
         # Security fix: disable robots.txt handling to prevent leaks of
-        # credentials when using  HttpAuthMiddleware.
-        splash_meta.setdefault('_dont_obey_robotstxt',
-                               meta.get('dont_obey_robotstxt', None))
-        meta['dont_obey_robotstxt'] = True
+        # credentials when using HttpAuthMiddleware
+        if not meta.get('_splash_robotstxt_handled'):
+            splash_meta.setdefault('_dont_obey_robotstxt',
+                                   meta.get('dont_obey_robotstxt'))
+            meta['dont_obey_robotstxt'] = True
 
         super(SplashRequest, self).__init__(url, callback, method, meta=meta,
                                             **kwargs)

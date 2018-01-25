@@ -267,6 +267,7 @@ class SplashMiddleware(object):
     def process_request(self, request, spider):
         if 'splash' not in request.meta:
             return
+        splash_options = request.meta['splash']
 
         if request.method not in {'GET', 'POST'}:
             logger.error(
@@ -280,11 +281,24 @@ class SplashMiddleware(object):
             raise IgnoreRequest("SplashRequest doesn't support "
                                 "HTTP {} method".format(request.method))
 
+        if not _http_auth_enabled(spider):
+            robots_disabled = request.meta.get('dont_obey_robotstxt') and \
+                              not splash_options.get('_dont_obey_robotstxt')
+            if robots_disabled and not request.meta.get('_splash_robotstxt_handled'):
+                # no robots.txt leak, but robots handling was disabled:
+                # re-schedule the request to enable robots.txt handling
+                new_request = request.replace(
+                    priority=request.priority + self.rescheduling_priority_adjust,
+                    dont_filter=True,
+                )
+                new_request.meta['dont_obey_robotstxt'] = False
+                new_request.meta['_splash_robotstxt_handled'] = True
+                return new_request
+
         if request.meta.get("_splash_processed"):
             # don't process the same request more than once
             return
 
-        splash_options = request.meta['splash']
         request.meta['_splash_processed'] = True
 
         slot_policy = splash_options.get('slot_policy', self.slot_policy)
@@ -326,6 +340,15 @@ class SplashMiddleware(object):
             # XXX: non-UTF8 request bodies are not supported now
             args.setdefault('body', request.body.decode('utf8'))
 
+        if not splash_options.get('dont_send_headers'):
+            headers = scrapy_headers_to_unicode_dict(request.headers)
+            if headers:
+                # Headers set by HttpAuthMiddleware should be used for Splash,
+                # not for the remote website (backwards compatibility).
+                if _http_auth_enabled(spider):
+                    headers.pop('Authorization', None)
+                args.setdefault('headers', headers)
+
         if _http_auth_enabled(spider):
             logger.error("ATTENTION: POSSIBLE SECURITY ISSUE. \n"
                          "Please use either SPLASH_USER / SPLASH_PASS "
@@ -347,22 +370,6 @@ class SplashMiddleware(object):
                              "instead of http_user / http_pass spider "
                              "attributes.")
                 reactor.stop()
-
-        else:
-            # no leak detected; bring back robots.txt handling
-            if splash_options.get('_dont_obey_robotstxt', None) is not None:
-                request.meta['dont_obey_robotstxt'] = splash_options[
-                    '_dont_obey_robotstxt']
-                del splash_options['_dont_obey_robotstxt']
-
-        if not splash_options.get('dont_send_headers'):
-            headers = scrapy_headers_to_unicode_dict(request.headers)
-            if headers:
-                # Headers set by HttpAuthMiddleware should be used for Splash,
-                # not for the remote website (backwards compatibility).
-                if _http_auth_enabled(spider):
-                    headers.pop('Authorization', None)
-                args.setdefault('headers', headers)
 
         body = json.dumps(args, ensure_ascii=False, sort_keys=True, indent=4)
         # print(body)

@@ -33,9 +33,8 @@ class HelloWorld(HtmlResource):
     extra_headers = {'X-MyHeader': 'my value', 'Set-Cookie': 'sessionid=ABCD'}
 
 
-class HelloWorldDisallowAuth(HelloWorld):
-    """ Disallow itself via robots.txt if a request to robots.txt
-    contains basic auth header. """
+class HelloWorldDisallowByRobots(HelloWorld):
+    """ Disallow itself via robots.txt """
     isLeaf = False
 
     def getChild(self, name, request):
@@ -46,8 +45,16 @@ class HelloWorldDisallowAuth(HelloWorld):
     class RobotsTxt(Resource):
         isLeaf = True
         def render_GET(self, request):
-            if request.requestHeaders.hasHeader('Authorization'):
-                return b'User-Agent: *\nDisallow: /\n'
+            return b'User-Agent: *\nDisallow: /\n'
+
+
+class HelloWorldDisallowAuth(HelloWorldDisallowByRobots):
+    """ Disallow itself via robots.txt if a request to robots.txt
+    contains basic auth header. """
+    class RobotsTxt(HelloWorldDisallowByRobots.RobotsTxt):
+        def render_GET(self, request):
+            if not request.requestHeaders.hasHeader('Authorization'):
+                return super(HelloWorldDisallowByRobots.RobotsTxt, self).render_GET()
             request.setResponseCode(404)
             return b''
 
