@@ -53,8 +53,8 @@ class HelloWorldDisallowAuth(HelloWorldDisallowByRobots):
     contains basic auth header. """
     class RobotsTxt(HelloWorldDisallowByRobots.RobotsTxt):
         def render_GET(self, request):
-            if not request.requestHeaders.hasHeader('Authorization'):
-                return super(HelloWorldDisallowByRobots.RobotsTxt, self).render_GET()
+            if request.requestHeaders.hasHeader('Authorization'):
+                return super(HelloWorldDisallowAuth.RobotsTxt, self).render_GET(request)
             request.setResponseCode(404)
             return b''
 
