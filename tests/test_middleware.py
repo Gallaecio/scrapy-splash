@@ -70,8 +70,6 @@ def test_splash_request():
     # check request preprocessing
     req2 = cookie_mw.process_request(req, None) or req
     req2 = mw.process_request(req2, None) or req2
-    req2 = cookie_mw.process_request(req, None) or req2
-    req2 = mw.process_request(req2, None) or req2
 
     assert req2 is not None
     assert req2 is not req
@@ -143,13 +141,9 @@ def test_splash_request_parameters():
     )
     req2 = cookie_mw.process_request(req, None) or req
     req2 = mw.process_request(req2, None) or req2
-    req2 = cookie_mw.process_request(req2, None) or req2
-    req2 = mw.process_request(req2, None) or req2
 
     assert req2.meta['ajax_crawlable'] is True
     assert req2.meta['splash'] == {
-        'SplashRequest': True,
-        '_dont_obey_robotstxt': None,
         'endpoint': 'execute',
         'splash_url': "http://mysplash.example.com",
         'slot_policy': SlotPolicy.SINGLE_SLOT,
@@ -210,9 +204,8 @@ def test_magic_response():
                         args={'lua_source': 'function main() end'},
                         magic_response=True,
                         cookies=[{'name': 'foo', 'value': 'bar'}])
-    for _ in range(2):
-        req = cookie_mw.process_request(req, None) or req
-        req = mw.process_request(req, None) or req
+    req = cookie_mw.process_request(req, None) or req
+    req = mw.process_request(req, None) or req
 
     resp_data = {
         'url': "http://exmaple.com/#id42",
@@ -262,10 +255,8 @@ def test_magic_response():
                         args={'lua_source': 'function main() end'},
                         magic_response=True,
                         cookies={'spam': 'ham'})
-
-    for _ in range(2):
-        req = cookie_mw.process_request(req, None) or req
-        req = mw.process_request(req, None) or req
+    req = cookie_mw.process_request(req, None) or req
+    req = mw.process_request(req, None) or req
 
     resp_data = {
         'html': '<html><body>Hello</body></html>',
@@ -310,9 +301,8 @@ def test_cookies():
             args={'lua_source': 'function main() end'},
             magic_response=True,
             cookies=cookies)
-        for _ in range(2):
-            req = cookie_mw.process_request(req, None) or req
-            req = mw.process_request(req, None) or req
+        req = cookie_mw.process_request(req, None) or req
+        req = mw.process_request(req, None) or req
         return req
 
     def response_with_cookies(req, cookies):
@@ -361,7 +351,6 @@ def test_magic_response2():
     mw = _get_mw()
     req = SplashRequest('http://example.com/', magic_response=True,
                         headers={'foo': 'bar'}, dont_send_headers=True)
-    req = mw.process_request(req, None)
     req = mw.process_request(req, None) or req
     assert 'headers' not in req.meta['splash']['args']
 
@@ -387,7 +376,6 @@ def test_unicode_url():
         # note unicode URL
         u"http://example.com/", endpoint='execute')
     req2 = mw.process_request(req, None) or req
-    req2 = mw.process_request(req2, None) or req2
     res = {'html': '<html><body>Hello</body></html>'}
     res_body = json.dumps(res)
     response = TextResponse("http://mysplash.example.com/execute",
@@ -402,7 +390,6 @@ def test_unicode_url():
 def test_magic_response_http_error():
     mw = _get_mw()
     req = SplashRequest('http://example.com/foo')
-    req = mw.process_request(req, None) or req
     req = mw.process_request(req, None) or req
 
     resp_data = {
@@ -430,7 +417,6 @@ def test_magic_response_http_error():
 def test_change_response_class_to_text():
     mw = _get_mw()
     req = SplashRequest('http://example.com/', magic_response=True)
-    req = mw.process_request(req, None)
     req = mw.process_request(req, None) or req
     # Such response can come when downloading a file,
     # or returning splash:html(): the headers say it's binary,
@@ -454,7 +440,6 @@ def test_change_response_class_to_json_binary():
     # but this is ok because magic_response presumes we are expecting
     # a valid splash json response.
     req = SplashRequest('http://example.com/', magic_response=False)
-    req = mw.process_request(req, None)
     req = mw.process_request(req, None) or req
     resp = Response('http://mysplash.example.com/execute',
                     headers={b'Content-Type': b'application/json'},
@@ -491,9 +476,8 @@ def test_magic_response_caching(tmpdir):
 
     # first call
     req = _get_req()
-    for _ in range(2):
-        req = cookie_mw.process_request(req, spider) or req
-        req = mw.process_request(req, spider) or req
+    req = cookie_mw.process_request(req, spider) or req
+    req = mw.process_request(req, spider) or req
     req = cache_mw.process_request(req, spider) or req
     assert isinstance(req, scrapy.Request)  # first call; the cache is empty
 
@@ -516,9 +500,8 @@ def test_magic_response_caching(tmpdir):
 
     # second call
     req = _get_req()
-    for _ in range(2):
-        req = cookie_mw.process_request(req, spider) or req
-        req = mw.process_request(req, spider) or req
+    req = cookie_mw.process_request(req, spider) or req
+    req = mw.process_request(req, spider) or req
     cached_resp = cache_mw.process_request(req, spider) or req
 
     # response should be from cache:
@@ -560,9 +543,6 @@ def test_cache_args():
     # <---- scheduler
     # process request before sending it to the downloader
     req = mw.process_request(req, spider) or req
-    # -----> scheduler
-    # <----- scheduler
-    req = mw.process_request(req, spider) or req
     # -----> downloader
     assert req.meta['splash']['args']['lua_source'] == lua_source
     assert req.meta['splash']['args']['save_args'] == ['lua_source']
@@ -592,9 +572,6 @@ def test_cache_args():
     # <---- scheduler
     # process request before sending it to the downloader
     req2 = mw.process_request(req2, spider) or req2
-    # -----> scheduler
-    # <----- scheduler
-    req2 = mw.process_request(req2, spider) or req2
     # -----> downloader
     assert req2.meta['splash']['args']['load_args'] == {"lua_source": "ba001160ef96fe2a3f938fea9e6762e204a562b3"}
     assert "lua_source" not in req2.meta['splash']['args']
@@ -620,9 +597,6 @@ def test_cache_args():
     assert req3.meta['splash']['args']['lua_source'] != lua_source
     # <---- scheduler
     req3 = mw.process_request(req3, spider) or req3
-    # -----> scheduler
-    # <----- scheduler
-    req3 = mw.process_request(req3, spider) or req3
     # -----> downloader
     assert json.loads(req3.body.decode('utf8')) == {
         'load_args': {'lua_source': 'ba001160ef96fe2a3f938fea9e6762e204a562b3'},
@@ -646,7 +620,6 @@ def test_cache_args():
     # process this request again
     req4, = list(dedupe_mw.process_spider_output(resp, [req4], spider))
     req4 = mw.process_request(req4, spider) or req4
-    req4 = mw.process_request(req4, spider) or req4
 
     # it should become save_args request after all middlewares
     assert json.loads(req4.body.decode('utf8')) == {
@@ -665,7 +638,6 @@ def test_splash_request_no_url():
         'endpoint': 'execute',
     }})
     req = mw.process_request(req1, None)
-    req = mw.process_request(req, None)
     assert req.url == 'http://127.0.0.1:8050/execute'
     assert json.loads(to_native_str(req.body)) == {
         'url': 'about:blank',
@@ -805,7 +777,6 @@ def test_auth():
     def assert_auth_header(user, pwd, header):
         mw = _get_mw({'SPLASH_USER': user, 'SPLASH_PASS': pwd})
         req = mw.process_request(SplashRequest("http://example.com"), None)
-        req = mw.process_request(req, None)
         assert 'Authorization' in req.headers
         assert req.headers['Authorization'] == header
 
@@ -815,7 +786,6 @@ def test_auth():
         else:
             mw = _get_mw()
         req = mw.process_request(SplashRequest("http://example.com"), None)
-        req = mw.process_request(req, None)
         assert 'Authorization' not in req.headers
 
     assert_auth_header('root', '', b'Basic cm9vdDo=')
