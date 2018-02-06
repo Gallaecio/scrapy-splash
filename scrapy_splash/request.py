@@ -43,7 +43,6 @@ class SplashRequest(scrapy.Request):
 
         meta = copy.deepcopy(meta) or {}
         splash_meta = meta.setdefault('splash', {})
-        splash_meta['SplashRequest'] = True
         splash_meta.setdefault('endpoint', endpoint)
         splash_meta.setdefault('slot_policy', slot_policy)
         if splash_url is not None:
