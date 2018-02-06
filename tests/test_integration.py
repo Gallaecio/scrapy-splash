@@ -80,6 +80,15 @@ class ScrapyAuthSpider(LuaSpider):
     http_pass = 'userpass'
 
 
+class NonSplashSpider(ResponseSpider):
+    """ Spider which uses HTTP auth and doesn't use Splash """
+    http_user = 'user'
+    http_pass = 'userpass'
+
+    def start_requests(self):
+        yield scrapy.Request(self.url)
+
+
 def assert_single_response(items):
     assert len(items) == 1
     return items[0]['response']
@@ -421,14 +430,6 @@ def test_protected_splash_settings_auth(settings_auth):
 @requires_splash
 @inlineCallbacks
 def test_protected_splash_httpauth_middleware(settings_auth):
-
-    class NonSplashSpider(ResponseSpider):
-        http_user = 'user'
-        http_pass = 'userpass'
-
-        def start_requests(self):
-            yield scrapy.Request(self.url)
-
     # httpauth middleware should enable auth for Splash, for backwards
     # compatibility reasons
     items, url, crawler = yield crawl_items(ScrapyAuthSpider, HelloWorld,
@@ -485,6 +486,12 @@ def test_robotstxt_can_work(settings_auth):
                                             HelloWorldDisallowByRobots,
                                             settings_auth)
     assert_robots_disabled(items)
+
+    # but robots.txt should still work for non-Splash requests
+    items, url, crawler = yield crawl_items(NonSplashSpider,
+                                            HelloWorldDisallowByRobots,
+                                            settings_auth)
+    assert_robots_enabled(items, crawler)
 
     # robots.txt should work when a proper auth method is used
     settings_auth['SPLASH_USER'] = 'user'

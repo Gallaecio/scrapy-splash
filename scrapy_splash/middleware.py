@@ -10,13 +10,13 @@ from collections import defaultdict
 from six.moves.urllib.parse import urljoin
 from six.moves.http_cookiejar import CookieJar
 
-from twisted.internet import reactor
 from w3lib.http import basic_auth_header
 import scrapy
 from scrapy.exceptions import NotConfigured, IgnoreRequest
 from scrapy.http.headers import Headers
 from scrapy.http.response.text import TextResponse
 from scrapy import signals
+from scrapy.downloadermiddlewares.robotstxt import RobotsTxtMiddleware
 
 from scrapy_splash.responsetypes import responsetypes
 from scrapy_splash.cookies import jar_to_har, har_to_jar
@@ -249,6 +249,8 @@ class SplashMiddleware(object):
         return cls(crawler, splash_base_url, slot_policy, log_400, auth)
 
     def spider_opened(self, spider):
+        replace_downloader_middleware(self.crawler, RobotsTxtMiddleware,
+                                      SafeRobotsTxtMiddleware)
         if not hasattr(spider, 'state'):
             spider.state = {}
 
@@ -280,20 +282,6 @@ class SplashMiddleware(object):
                 request.method))
             raise IgnoreRequest("SplashRequest doesn't support "
                                 "HTTP {} method".format(request.method))
-
-        if not _http_auth_enabled(spider):
-            robots_disabled = request.meta.get('dont_obey_robotstxt') and \
-                              not splash_options.get('_dont_obey_robotstxt')
-            if robots_disabled and not request.meta.get('_splash_robotstxt_handled'):
-                # no robots.txt leak, but robots handling was disabled:
-                # re-schedule the request to enable robots.txt handling
-                new_request = request.replace(
-                    priority=request.priority + self.rescheduling_priority_adjust,
-                    dont_filter=True,
-                )
-                new_request.meta['dont_obey_robotstxt'] = False
-                new_request.meta['_splash_robotstxt_handled'] = True
-                return new_request
 
         if request.meta.get("_splash_processed"):
             # don't process the same request more than once
@@ -348,28 +336,6 @@ class SplashMiddleware(object):
                 if _http_auth_enabled(spider):
                     headers.pop('Authorization', None)
                 args.setdefault('headers', headers)
-
-        if _http_auth_enabled(spider):
-            logger.error("ATTENTION: POSSIBLE SECURITY ISSUE. \n"
-                         "Please use either SPLASH_USER / SPLASH_PASS "
-                         "settings or `splash_headers` argument "
-                         "for Splash authentication. Using "
-                         "HttpAuthMiddleware (i.e. `http_user` and "
-                         "`http_pass` spider attributes) is insecure "
-                         "because it is possible to accidentally "
-                         "leak Splash credentials to a remote website. "
-                         "Please update your code ASAP.")
-            self.crawler.stats.inc_value("splash/insecure")
-            if 'SplashRequest' not in splash_options:
-                # Only SplashRequest has protection against robots.txt
-                # credentials leak; raw request.meta['splash'] requests don't.
-                logger.error("ATTENTION: SECURITY ISSUE. The spider is "
-                             "leaking Splash credentials to remote websites "
-                             "via robots.txt requests. Spider is stopped. "
-                             "Use SPLASH_USER / SPLASH_PASS settings "
-                             "instead of http_user / http_pass spider "
-                             "attributes.")
-                reactor.stop()
 
         body = json.dumps(args, ensure_ascii=False, sort_keys=True, indent=4)
         # print(body)
@@ -532,7 +498,33 @@ class SplashMiddleware(object):
         )
 
 
+class SafeRobotsTxtMiddleware(RobotsTxtMiddleware):
+    def process_request(self, request, spider):
+        # disable robots.txt for Splash requests
+        if _http_auth_enabled(spider) and 'splash' in request.meta:
+            return
+        return super(SafeRobotsTxtMiddleware, self).process_request(
+            request, spider)
+
+
 def _http_auth_enabled(spider):
     # FIXME: this function should always return False if HttpAuthMiddleware is
     # not in a middleware list.
     return getattr(spider, 'http_user', '') or getattr(spider, 'http_pass', '')
+
+
+def replace_downloader_middleware(crawler, old_cls, new_cls):
+    """ Replace downloader middleware with another one """
+    new_mw = new_cls.from_crawler(crawler)
+    mw_manager = crawler.engine.downloader.middleware
+    mw_manager.middlewares = tuple([
+        mw if mw.__class__ is not old_cls else new_mw
+        for mw in mw_manager.middlewares
+    ])
+    for method_name, callbacks in mw_manager.methods.items():
+        for idx, meth in enumerate(callbacks):
+            method_cls = meth.__self__.__class__
+            if method_cls is old_cls:
+                new_meth = getattr(new_mw, method_name)
+                # logger.debug("{} is replaced with {}".format(meth, new_meth))
+                callbacks[idx] = new_meth
