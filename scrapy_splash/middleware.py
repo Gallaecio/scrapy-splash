@@ -516,7 +516,11 @@ def _http_auth_enabled(spider):
 
 def replace_downloader_middleware(crawler, old_cls, new_cls):
     """ Replace downloader middleware with another one """
-    new_mw = new_cls.from_crawler(crawler)
+    try:
+        new_mw = new_cls.from_crawler(crawler)
+    except NotConfigured:
+        return
+
     mw_manager = crawler.engine.downloader.middleware
     mw_manager.middlewares = tuple([
         mw if mw.__class__ is not old_cls else new_mw
