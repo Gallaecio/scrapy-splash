@@ -379,6 +379,7 @@ class SplashMiddleware(object):
             headers=headers,
             priority=request.priority + self.rescheduling_priority_adjust
         )
+        new_request.meta['dont_obey_robotstxt'] = True
         self.crawler.stats.inc_value('splash/%s/request_count' % endpoint)
         return new_request
 
