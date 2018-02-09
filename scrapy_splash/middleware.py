@@ -249,8 +249,9 @@ class SplashMiddleware(object):
         return cls(crawler, splash_base_url, slot_policy, log_400, auth)
 
     def spider_opened(self, spider):
-        replace_downloader_middleware(self.crawler, RobotsTxtMiddleware,
-                                      SafeRobotsTxtMiddleware)
+        if _http_auth_enabled(spider):
+            replace_downloader_middleware(self.crawler, RobotsTxtMiddleware,
+                                          SafeRobotsTxtMiddleware)
         if not hasattr(spider, 'state'):
             spider.state = {}
 
