@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
+import pytest
 import scrapy
+from pkg_resources import parse_version
 from pytest_twisted import inlineCallbacks
 from w3lib.url import canonicalize_url
 from w3lib.http import basic_auth_header
@@ -468,6 +470,12 @@ def test_protected_splash_httpauth_middleware(settings_auth):
     assert not hasattr(response, 'splash_response_status')
 
 
+@pytest.mark.xfail(
+    parse_version(scrapy.__version__) < parse_version("1.1"),
+    reason="https://github.com/scrapy/scrapy/issues/1471",
+    strict=True,
+    run=True,
+)
 @requires_splash
 @inlineCallbacks
 def test_robotstxt_can_work(settings_auth):
