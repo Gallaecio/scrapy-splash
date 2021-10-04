@@ -482,12 +482,10 @@ def test_robotstxt_can_work(settings_auth):
         assert crawler.stats.get_value('downloader/exception_type_count/scrapy.exceptions.IgnoreRequest') == 1
 
     def _crawl_items(spider, resource):
-        settings = {'ROBOTSTXT_ENABLED': True}
-        settings.update(settings_auth)
         return crawl_items(
             spider,
             resource,
-            settings,
+            settings_auth,
             url_path='/',  # https://github.com/scrapy/protego/issues/17
         )
 
