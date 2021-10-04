@@ -481,24 +481,29 @@ def test_robotstxt_can_work(settings_auth):
         assert len(items) == 0
         assert crawler.stats.get_value('downloader/exception_type_count/scrapy.exceptions.IgnoreRequest') == 1
 
+    def _crawl_items(spider, resource):
+        return crawl_items(
+            spider,
+            resource,
+            settings_auth,
+            url_path='/',  # https://github.com/scrapy/protego/issues/17
+        )
+
     # when old auth method is used, robots.txt should be disabled
-    items, url, crawler = yield crawl_items(ScrapyAuthSpider,
-                                            HelloWorldDisallowByRobots,
-                                            settings_auth)
+    items, url, crawler = yield _crawl_items(ScrapyAuthSpider,
+                                             HelloWorldDisallowByRobots)
     assert_robots_disabled(items)
 
     # but robots.txt should still work for non-Splash requests
-    items, url, crawler = yield crawl_items(NonSplashSpider,
-                                            HelloWorldDisallowByRobots,
-                                            settings_auth)
+    items, url, crawler = yield _crawl_items(NonSplashSpider,
+                                             HelloWorldDisallowByRobots)
     assert_robots_enabled(items, crawler)
 
     # robots.txt should work when a proper auth method is used
     settings_auth['SPLASH_USER'] = 'user'
     settings_auth['SPLASH_PASS'] = 'userpass'
-    items, url, crawler = yield crawl_items(LuaSpider,
-                                            HelloWorldDisallowByRobots,
-                                            settings_auth)
+    items, url, crawler = yield _crawl_items(LuaSpider,
+                                             HelloWorldDisallowByRobots)
     assert_robots_enabled(items, crawler)
 
     # disable robotstxt middleware - robots middleware shouldn't work
@@ -507,9 +512,8 @@ def test_robotstxt_can_work(settings_auth):
             'HTTPERROR_ALLOW_ALL': True,
             'ROBOTSTXT_OBEY': False,
         }
-    items, url, crawler = yield crawl_items(DontObeyRobotsSpider,
-                                            HelloWorldDisallowByRobots,
-                                            settings_auth)
+    items, url, crawler = yield _crawl_items(DontObeyRobotsSpider,
+                                             HelloWorldDisallowByRobots)
     assert_robots_disabled(items)
 
     # disable robotstxt middleware via request meta
@@ -520,7 +524,6 @@ def test_robotstxt_can_work(settings_auth):
                                 meta={'dont_obey_robotstxt': True},
                                 args={'lua_source': DEFAULT_SCRIPT})
 
-    items, url, crawler = yield crawl_items(MetaDontObeyRobotsSpider,
-                                            HelloWorldDisallowByRobots,
-                                            settings_auth)
+    items, url, crawler = yield _crawl_items(MetaDontObeyRobotsSpider,
+                                             HelloWorldDisallowByRobots)
     assert_robots_disabled(items)

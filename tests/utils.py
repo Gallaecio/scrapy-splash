@@ -15,7 +15,13 @@ requires_splash = pytest.mark.skipif(
 
 
 @inlineCallbacks
-def crawl_items(spider_cls, resource_cls, settings, spider_kwargs=None):
+def crawl_items(
+    spider_cls,
+    resource_cls,
+    settings,
+    spider_kwargs=None,
+    url_path="",
+):
     """ Use spider_cls to crawl resource_cls. URL of the resource is passed
     to the spider as ``url`` argument.
     Return ``(items, resource_url, crawler)`` tuple.
@@ -24,10 +30,10 @@ def crawl_items(spider_cls, resource_cls, settings, spider_kwargs=None):
     crawler = make_crawler(spider_cls, settings)
     with MockServer(resource_cls) as s:
         print("mock server", s.root_url)
-        root_url = s.root_url
+        root_url = s.root_url + url_path
         yield crawler.crawl(url=root_url, **spider_kwargs)
     items = getattr(crawler.spider, 'collected_items', [])
-    result = items, s.root_url, crawler
+    result = items, root_url, crawler
     returnValue(result)
 
 
